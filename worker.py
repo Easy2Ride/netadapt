@@ -4,6 +4,9 @@ import os
 import common 
 import constants 
 import network_utils as networkUtils
+import sys
+sys.path.append("fast-depth") # Since cannot import from paths with '-'
+import models as fastdepth
 
 '''
     Launched by `master.py`
@@ -36,7 +39,29 @@ def worker(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
     # Get the network utils.
-    model = torch.load(args.model_path)
+    working_dir = os.path.abspath(os.getcwd())
+    scales = [0, 1, 2, 3]
+    fastdepthmodel = fastdepth.MobileNetSkipAddMultiScale([], False, 
+            os.path.join(working_dir, 'fast-depth','imagenet', 'results', 'imagenet.arch=mobilenet.lr=0.1.bs=256', 'model_best.pth.tar'),
+            scales)
+    class Fastmonomodel(nn.Module):
+        """This is a wrapper of the depth estimation module. Since torch.jit.trace
+        only supports tuples as model output
+        Inputs: 
+            inputs: fastdepth model while initiatization
+                    RGB image as input for depth
+        Outputs:
+            outputs: disparity image
+            """
+        def __init__(self, fastdepth):
+            super(Fastmonomodel, self).__init__()
+            self.fastdepth = fastdepth
+
+        def forward(self, image):
+            return self.fastdepth(image)["disp", 0]
+
+    model = Fastmonomodel(fastdepthmodel)
+    #model = torch.load(args.model_path)
     network_utils = networkUtils.__dict__[args.arch](model, args.input_data_shape, args.dataset_path, args.finetune_lr)
     
     if network_utils.get_num_simplifiable_blocks() <= args.block:

@@ -8,7 +8,10 @@ import warnings
 from scipy.interpolate import Rbf
 
 from collections import OrderedDict
-from constants import *
+try:
+    from constants import *
+except ModuleNotFoundError:
+    from .constants import *
 
 def update_progress(index, length, **kwargs):
     '''

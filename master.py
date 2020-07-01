@@ -9,7 +9,8 @@ import sys
 import warnings
 import common
 import network_utils as networkUtils
-
+sys.path.append("fast-depth") # Since cannot import from paths with '-'
+import models as fastdepth
 '''
     The main file of NetAdapt.
     
@@ -280,8 +281,33 @@ def master(args):
         copyfile(args.init_model_path, current_model_path)
 
         # Initialize variables.
-        model = torch.load(current_model_path)
-        
+        working_dir = os.path.abspath(os.getcwd())
+        scales = [0, 1, 2, 3]
+        fastdepthmodel = fastdepth.MobileNetSkipAddMultiScale([], False, 
+                os.path.join(working_dir, 'fast-depth','imagenet', 'results', 'imagenet.arch=mobilenet.lr=0.1.bs=256', 'model_best.pth.tar'),
+                scales)
+        class Fastmonomodel(torch.nn.Module):
+            """This is a wrapper of the depth estimation module. Since torch.jit.trace
+            only supports tuples as model output
+            Inputs: 
+                inputs: fastdepth model while initiatization
+                        RGB image as input for depth
+            Outputs:
+                outputs: disparity image
+                """
+            def __init__(self, fastdepth):
+                super(Fastmonomodel, self).__init__()
+                self.fastdepth = fastdepth
+
+            def forward(self, image):
+                return self.fastdepth(image)["disp", 0]
+
+
+        # Since the original method loads model, which gives errors, manually loading the fastdepth model
+         
+        fastdepthmodel.load_state_dict(torch.load(current_model_path))
+        model = Fastmonomodel(fastdepthmodel)
+        #print(model.keys())
         # Select network_utils.
         model_arch = args.arch
         network_utils = networkUtils.__dict__[model_arch](model, args.input_data_shape, args.dataset_path)
