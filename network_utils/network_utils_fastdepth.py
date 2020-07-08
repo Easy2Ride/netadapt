@@ -385,11 +385,10 @@ class networkUtils_fastdepth(NetworkUtilsAbstract):
 
         depth_gt = depth_gt[mask]
         depth_pred = depth_pred[mask]
-        depth_pred *= torch.median(depth_gt) 
-        depth_pred /= torch.median(depth_pred)
+        # x += 1 (inplace operation) gives error (no gradient), while x = x + 1 works
+        depth_pred = depth_pred * torch.median(depth_gt) 
+        depth_pred = depth_pred / torch.median(depth_pred)
 
-
-        depth_pred = (depth_pred + depth_pred) /2
         depth_pred = torch.clamp(depth_pred, min=1e-3, max=80)
 
         # rmse = (depth_gt - depth_pred) ** 2
