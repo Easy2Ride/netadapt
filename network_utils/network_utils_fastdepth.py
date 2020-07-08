@@ -320,7 +320,7 @@ class networkUtils_fastdepth(NetworkUtilsAbstract):
         '''
         
         #_NUM_CLASSES = 10
-        torch.autograd.set_detect_anomaly(True)
+        #torch.autograd.set_detect_anomaly(True)
         optimizer = torch.optim.SGD(model.parameters(), self.finetune_lr, 
                                          momentum=self.momentum, weight_decay=self.weight_decay)
         model = model.to(self.device) 
