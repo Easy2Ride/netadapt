@@ -44,7 +44,9 @@ def worker(args):
     fastdepthmodel = fastdepth.MobileNetSkipAddMultiScale([], False, 
             os.path.join(working_dir, 'fast-depth','imagenet', 'results', 'imagenet.arch=mobilenet.lr=0.1.bs=256', 'model_best.pth.tar'),
             scales)
-    class Fastmonomodel(nn.Module):
+    fastdepthmodel.load_state_dict(torch.load("C:/Users/z/Desktop/work/netadapt/monodepth2/models/fastdepth_640x192/fastdepth.pth"))
+
+    class Fastmonomodel(torch.nn.Module):
         """This is a wrapper of the depth estimation module. Since torch.jit.trace
         only supports tuples as model output
         Inputs: 
@@ -59,9 +61,20 @@ def worker(args):
 
         def forward(self, image):
             return self.fastdepth(image)["disp", 0]
-
-    model = Fastmonomodel(fastdepthmodel)
+    
+    class Identity(torch.nn.Module):
+        def __init__(self):
+            super(Identity, self).__init__()
+            
+        def forward(self, x):
+            return x
+    # Replace smaller scale output layers with Identity
+    for i in [1,2,3]:
+        if hasattr(fastdepthmodel, 'decode_dispconv{}'.format(i)):
+            print("Replaced decode_dispconv",i, " with Identity")
+            setattr(fastdepthmodel, 'decode_dispconv{}'.format(i), Identity())
     #model = torch.load(args.model_path)
+    model = Fastmonomodel(fastdepthmodel)
     network_utils = networkUtils.__dict__[args.arch](model, args.input_data_shape, args.dataset_path, args.finetune_lr)
     
     if network_utils.get_num_simplifiable_blocks() <= args.block:

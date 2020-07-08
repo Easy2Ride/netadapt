@@ -204,6 +204,8 @@ def get_network_def_from_model(model, input_data_shape):
                     before_squared_pixel_shuffle_factor = int(1)
                 else:
                     if previous_out_channels % layer.in_channels != 0:
+                        print(layer_param_name)
+                        print(layer)
                         raise ValueError('previous_out_channels is not divisible by layer.in_channels.')
                     before_squared_pixel_shuffle_factor = int(previous_out_channels / layer.in_channels)
                 previous_out_channels = layer.out_channels

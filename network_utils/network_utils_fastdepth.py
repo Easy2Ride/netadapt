@@ -151,7 +151,7 @@ class networkUtils_fastdepth(NetworkUtilsAbstract):
         train_filenames = readlines(fpath.format("train"))
         val_filenames = readlines(fpath.format("val"))
 
-        dataset = datasets.KITTIDepthDataset # Niantic
+        dataset = datasets.KITTIRAWDataset # Niantic
         train_dataset = dataset(data_dir, train_filenames, self.height, self.width, 
                             self.frame_ids, 4, is_train=True, img_ext=img_ext)
         train_loader = DataLoader(train_dataset, batch_size, True,
@@ -187,7 +187,7 @@ class networkUtils_fastdepth(NetworkUtilsAbstract):
         # self.models["pose"].to(self.device)
         # parameters_to_train += list(self.models["pose"].parameters())
         
-        self.optimizer = optim.Adam(model.parameters(), self.learning_rate)
+        self.optimizer = optim.Adam(model.parameters(), self.finetune_lr)
         # self.lr_scheduler = optim.lr_scheduler.StepLR(
         #     self.optimizer, scheduler_step_size, 0.1)
 
@@ -232,8 +232,9 @@ class networkUtils_fastdepth(NetworkUtilsAbstract):
                 be simplified/pruned.
                 `simplified_resource`: (float) the estimated resource consumption of simplified models.
         '''
+        skip_connection_block_sets = [(1,17),(3,16),(5,15)]
         return fns.simplify_network_def_based_on_constraint(network_def, block, constraint, 
-                                                            resource_type, lookup_table_path)
+                                                            resource_type, lookup_table_path, skip_connection_block_sets)
         
 
     def simplify_model_based_on_network_def(self, simplified_network_def, model):
@@ -319,10 +320,13 @@ class networkUtils_fastdepth(NetworkUtilsAbstract):
         '''
         
         #_NUM_CLASSES = 10
+        torch.autograd.set_detect_anomaly(True)
         optimizer = torch.optim.SGD(model.parameters(), self.finetune_lr, 
                                          momentum=self.momentum, weight_decay=self.weight_decay)
-        model = model.cuda()
+        model = model.to(self.device) 
         model.train()
+        # for param in model.parameters():
+        #     param.requires_grad=True
         dataloader_iter = iter(self.train_loader)
         for i in range(iterations):
             try:
@@ -336,17 +340,17 @@ class networkUtils_fastdepth(NetworkUtilsAbstract):
                 sys.stdout.flush()
             
             for key, ipt in inputs.items():
-                inputs[key] = ipt.to(device) 
+                inputs[key] = ipt.to(self.device) 
 
             # Compute depth prediction
-            disp = model(inputs["color_aug", 0, 0])[("disp", 0)]
+            disp = model(inputs["color_aug", 0, 0])
             # disp = F.interpolate(
             #         disp, [self.opt.height, self.opt.width], mode="bilinear", align_corners=False)
 
             _, depth_pred = disp_to_depth(disp, self.min_depth, self.max_depth)
-
+            # print("Depth pred requires grad set to: ",depth_pred.requires_grad)
             loss = self.compute_depth_losses(inputs, depth_pred)
-
+            # print("Loss requires grad set to: ",loss.requires_grad)
             # target.unsqueeze_(1)
             # target_onehot = torch.FloatTensor(target.shape[0], _NUM_CLASSES)
             # target_onehot.zero_()
@@ -369,7 +373,7 @@ class networkUtils_fastdepth(NetworkUtilsAbstract):
         #depth_pred = outputs[("depth", 0, 0)]
         depth_pred = torch.clamp(F.interpolate(
             depth_pred, [375, 1242], mode="bilinear", align_corners=False), 1e-3, 80)
-        depth_pred = depth_pred.detach()
+        #depth_pred = depth_pred.detach()
 
         depth_gt = inputs["depth_gt"]
         mask = depth_gt > 0
@@ -381,8 +385,11 @@ class networkUtils_fastdepth(NetworkUtilsAbstract):
 
         depth_gt = depth_gt[mask]
         depth_pred = depth_pred[mask]
-        depth_pred *= torch.median(depth_gt) / torch.median(depth_pred)
+        depth_pred *= torch.median(depth_gt) 
+        depth_pred /= torch.median(depth_pred)
 
+
+        depth_pred = (depth_pred + depth_pred) /2
         depth_pred = torch.clamp(depth_pred, min=1e-3, max=80)
 
         # rmse = (depth_gt - depth_pred) ** 2
@@ -413,9 +420,9 @@ class networkUtils_fastdepth(NetworkUtilsAbstract):
         with torch.no_grad():
             for i, inputs in enumerate(self.val_loader):
                 for key, ipt in inputs.items():
-                    inputs[key] = ipt.to(device) 
+                    inputs[key] = ipt.to(self.device) 
 
-                disp = model(inputs["color_aug", 0, 0])[("disp", 0)]
+                disp = model(inputs["color_aug", 0, 0])
                 # disp = F.interpolate(
                 #         disp, [self.opt.height, self.opt.width], mode="bilinear", align_corners=False)
 

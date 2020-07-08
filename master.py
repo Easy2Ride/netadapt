@@ -302,10 +302,20 @@ def master(args):
             def forward(self, image):
                 return self.fastdepth(image)["disp", 0]
 
+        fastdepthmodel.load_state_dict(torch.load(current_model_path))
 
         # Since the original method loads model, which gives errors, manually loading the fastdepth model
-         
-        fastdepthmodel.load_state_dict(torch.load(current_model_path))
+        class Identity(torch.nn.Module):
+            def __init__(self):
+                super(Identity, self).__init__()
+                
+            def forward(self, x):
+                return x
+        # Replace smaller scale output layers with Identity
+        for i in [1,2,3]:
+            if hasattr(fastdepthmodel, 'decode_dispconv{}'.format(i)):
+                print("Replaced decode_dispconv",i, " with Identity")
+                setattr(fastdepthmodel, 'decode_dispconv{}'.format(i), Identity())
         model = Fastmonomodel(fastdepthmodel)
         #print(model.keys())
         # Select network_utils.
