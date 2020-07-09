@@ -195,6 +195,48 @@ def _save_and_print_history(network_utils, history, pickle_file_path, text_file_
                                                        num_filters_str))
 
 
+def load_model(dict_state_path, map_location=None):
+    # Since torch.load(model) is giving pickle serialization error,
+    # we need to load model seperately and load the dict_state seperately
+
+    working_dir = os.path.abspath(os.getcwd())
+    scales = [0, 1, 2, 3]
+    fastdepthmodel = fastdepth.MobileNetSkipAddMultiScale([], False, 
+            os.path.join(working_dir, 'fast-depth','imagenet', 'results', 'imagenet.arch=mobilenet.lr=0.1.bs=256', 'model_best.pth.tar'),
+            scales)
+    class Fastmonomodel(torch.nn.Module):
+        """This is a wrapper of the depth estimation module. Since torch.jit.trace
+        only supports tuples as model output
+        Inputs: 
+            inputs: fastdepth model while initiatization
+                    RGB image as input for depth
+        Outputs:
+            outputs: disparity image
+            """
+        def __init__(self, fastdepth):
+            super(Fastmonomodel, self).__init__()
+            self.fastdepth = fastdepth
+
+        def forward(self, image):
+            return self.fastdepth(image)["disp", 0]
+
+    fastdepthmodel.load_state_dict(torch.load(dict_state_path, map_location=map_location))
+
+    # Since the original method loads model, which gives errors, manually loading the fastdepth model
+    class Identity(torch.nn.Module):
+        def __init__(self):
+            super(Identity, self).__init__()
+            
+        def forward(self, x):
+            return x
+    # Replace smaller scale output layers with Identity
+    for i in [1,2,3]:
+        if hasattr(fastdepthmodel, 'decode_dispconv{}'.format(i)):
+            print("Replaced decode_dispconv",i, " with Identity")
+            setattr(fastdepthmodel, 'decode_dispconv{}'.format(i), Identity())
+    model = Fastmonomodel(fastdepthmodel)
+    return model
+
 def master(args):
     """
         The main function of the master.
@@ -237,7 +279,8 @@ def master(args):
         current_accuracy = history[_KEY_HISTORY][-1][_KEY_ACCURACY]
 
         # Get the network utils.
-        model = torch.load(current_model_path, map_location=lambda storage, loc: storage)
+        model = load_model(current_model_path, map_location=lambda storage, loc: storage)
+        #model = torch.load(current_model_path, map_location=lambda storage, loc: storage)
              
         # Select network_utils.
         model_arch = args.arch
@@ -281,42 +324,9 @@ def master(args):
         copyfile(args.init_model_path, current_model_path)
 
         # Initialize variables.
-        working_dir = os.path.abspath(os.getcwd())
-        scales = [0, 1, 2, 3]
-        fastdepthmodel = fastdepth.MobileNetSkipAddMultiScale([], False, 
-                os.path.join(working_dir, 'fast-depth','imagenet', 'results', 'imagenet.arch=mobilenet.lr=0.1.bs=256', 'model_best.pth.tar'),
-                scales)
-        class Fastmonomodel(torch.nn.Module):
-            """This is a wrapper of the depth estimation module. Since torch.jit.trace
-            only supports tuples as model output
-            Inputs: 
-                inputs: fastdepth model while initiatization
-                        RGB image as input for depth
-            Outputs:
-                outputs: disparity image
-                """
-            def __init__(self, fastdepth):
-                super(Fastmonomodel, self).__init__()
-                self.fastdepth = fastdepth
+        model = load_model(current_model_path)
 
-            def forward(self, image):
-                return self.fastdepth(image)["disp", 0]
-
-        fastdepthmodel.load_state_dict(torch.load(current_model_path))
-
-        # Since the original method loads model, which gives errors, manually loading the fastdepth model
-        class Identity(torch.nn.Module):
-            def __init__(self):
-                super(Identity, self).__init__()
-                
-            def forward(self, x):
-                return x
-        # Replace smaller scale output layers with Identity
-        for i in [1,2,3]:
-            if hasattr(fastdepthmodel, 'decode_dispconv{}'.format(i)):
-                print("Replaced decode_dispconv",i, " with Identity")
-                setattr(fastdepthmodel, 'decode_dispconv{}'.format(i), Identity())
-        model = Fastmonomodel(fastdepthmodel)
+        
         #print(model.keys())
         # Select network_utils.
         model_arch = args.arch
@@ -426,12 +436,13 @@ def master(args):
         if args.save_interval == -1 or (current_iter % args.save_interval != 0):
             for block_idx in range(network_utils.get_num_simplifiable_blocks()):
                 temp_model_path = os.path.join(worker_folder, common.WORKER_MODEL_FILENAME_TEMPLATE.format(current_iter, block_idx))
-                os.remove(temp_model_path)
-                print('Remove', temp_model_path)
+                #os.remove(temp_model_path)
+                #print('Remove', temp_model_path)
             print(' ')
 
         # Save and print the history.
-        model = torch.load(current_model_path)
+        model = load_model(current_model_path)
+        #model = torch.load(current_model_path)
         if type(model) is dict:
             model = model[_KEY_MODEL]
         network_def = network_utils.get_network_def_from_model(model)
