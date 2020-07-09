@@ -101,17 +101,17 @@ def worker(args):
     print('Accuracy after finetune:', fine_tuned_accuracy)
     
     # Save the results.
-    torch.save(fine_tuned_model,
+    torch.save(fine_tuned_model.state_dict(),
                os.path.join(args.worker_folder,
                             common.WORKER_MODEL_FILENAME_TEMPLATE.format(args.netadapt_iteration, args.block)))
     with open(os.path.join(args.worker_folder,
                            common.WORKER_ACCURACY_FILENAME_TEMPLATE.format(args.netadapt_iteration, args.block)),
               'w') as file_id:
-        file_id.write(str(fine_tuned_accuracy))
+        file_id.write(str(float(fine_tuned_accuracy)))
     with open(os.path.join(args.worker_folder,
                            common.WORKER_RESOURCE_FILENAME_TEMPLATE.format(args.netadapt_iteration, args.block)),
               'w') as file_id:
-        file_id.write(str(simplified_resource))
+        file_id.write(str(float(simplified_resource)))
     with open(os.path.join(args.worker_folder,
                            common.WORKER_FINISH_FILENAME_TEMPLATE.format(args.netadapt_iteration, args.block)),
               'w') as file_id:

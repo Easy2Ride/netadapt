@@ -440,7 +440,7 @@ class networkUtils_fastdepth(NetworkUtilsAbstract):
         print(' ')
         print('Total MSE: {:4.2f}% '.format(float(mse)))
         print('===================================================================')
-        return mse
+        return mse.to("cpu").data
     
 
 def fastdepth(model, input_data_shape, dataset_path, finetune_lr=1e-3):
