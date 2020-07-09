@@ -220,7 +220,11 @@ def load_model(dict_state_path, map_location=None):
         def forward(self, image):
             return self.fastdepth(image)["disp", 0]
 
-    fastdepthmodel.load_state_dict(torch.load(dict_state_path, map_location=map_location))
+    cant_load_dict = False
+    try:
+        fastdepthmodel.load_state_dict(torch.load(dict_state_path, map_location=map_location), strict=False)
+    except RuntimeError:
+        cant_load_dict = True
 
     # Since the original method loads model, which gives errors, manually loading the fastdepth model
     class Identity(torch.nn.Module):
@@ -234,7 +238,10 @@ def load_model(dict_state_path, map_location=None):
         if hasattr(fastdepthmodel, 'decode_dispconv{}'.format(i)):
             print("Replaced decode_dispconv",i, " with Identity")
             setattr(fastdepthmodel, 'decode_dispconv{}'.format(i), Identity())
+    
     model = Fastmonomodel(fastdepthmodel)
+    if cant_load_dict:
+        model.load_state_dict(torch.load(dict_state_path, map_location=map_location))
     return model
 
 def master(args):
@@ -441,6 +448,7 @@ def master(args):
             print(' ')
 
         # Save and print the history.
+        print(current_model_path)
         model = load_model(current_model_path)
         #model = torch.load(current_model_path)
         if type(model) is dict:
