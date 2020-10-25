@@ -14,6 +14,52 @@ import models as fastdepth
     Simplify a certain block of models and then finetune for several iterations.
 '''
 
+def load_model(dict_state_path, map_location=None):
+    # Since torch.load(model) is giving pickle serialization error,
+    # we need to load model seperately and load the dict_state seperately
+
+    working_dir = os.path.abspath(os.getcwd())
+    scales = [0, 1, 2, 3]
+    fastdepthmodel = fastdepth.MobileNetSkipAddMultiScale(False, "", scales)
+    class Fastmonomodel(torch.nn.Module):
+        """This is a wrapper of the depth estimation module. Since torch.jit.trace
+        only supports tuples as model output
+        Inputs: 
+            inputs: fastdepth model while initiatization
+                    RGB image as input for depth
+        Outputs:
+            outputs: disparity image
+            """
+        def __init__(self, fastdepth):
+            super(Fastmonomodel, self).__init__()
+            self.fastdepth = fastdepth
+
+        def forward(self, image):
+            return self.fastdepth(image)["disp", 0]
+
+    cant_load_dict = False
+    try:
+        fastdepthmodel.load_state_dict(torch.load(dict_state_path, map_location=map_location), strict=False)
+    except RuntimeError:
+        cant_load_dict = True
+
+    # Since the original method loads model, which gives errors, manually loading the fastdepth model
+    class Identity(torch.nn.Module):
+        def __init__(self):
+            super(Identity, self).__init__()
+            
+        def forward(self, x):
+            return x
+    # Replace smaller scale output layers with Identity
+    for i in [1,2,3]:
+        if hasattr(fastdepthmodel, 'decode_dispconv{}'.format(i)):
+            print("Replaced decode_dispconv",i, " with Identity")
+            setattr(fastdepthmodel, 'decode_dispconv{}'.format(i), Identity())
+    
+    model = Fastmonomodel(fastdepthmodel)
+    if cant_load_dict:
+        model.load_state_dict(torch.load(dict_state_path, map_location=map_location))
+    return model
 
 # Supported network_utils
 network_utils_all = sorted(name for name in networkUtils.__dict__
@@ -39,42 +85,8 @@ def worker(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
     # Get the network utils.
-    working_dir = os.path.abspath(os.getcwd())
-    scales = [0, 1, 2, 3]
-    fastdepthmodel = fastdepth.MobileNetSkipAddMultiScale([], False, 
-            os.path.join(working_dir, 'fast-depth','imagenet', 'results', 'imagenet.arch=mobilenet.lr=0.1.bs=256', 'model_best.pth.tar'),
-            scales)
-    fastdepthmodel.load_state_dict(torch.load("C:/Users/z/Desktop/work/netadapt/monodepth2/models/fastdepth_640x192/fastdepth.pth"))
-
-    class Fastmonomodel(torch.nn.Module):
-        """This is a wrapper of the depth estimation module. Since torch.jit.trace
-        only supports tuples as model output
-        Inputs: 
-            inputs: fastdepth model while initiatization
-                    RGB image as input for depth
-        Outputs:
-            outputs: disparity image
-            """
-        def __init__(self, fastdepth):
-            super(Fastmonomodel, self).__init__()
-            self.fastdepth = fastdepth
-
-        def forward(self, image):
-            return self.fastdepth(image)["disp", 0]
-    
-    class Identity(torch.nn.Module):
-        def __init__(self):
-            super(Identity, self).__init__()
-            
-        def forward(self, x):
-            return x
-    # Replace smaller scale output layers with Identity
-    for i in [1,2,3]:
-        if hasattr(fastdepthmodel, 'decode_dispconv{}'.format(i)):
-            print("Replaced decode_dispconv",i, " with Identity")
-            setattr(fastdepthmodel, 'decode_dispconv{}'.format(i), Identity())
+    model = load_model(args.model_path, map_location=lambda storage, loc: storage)
     #model = torch.load(args.model_path)
-    model = Fastmonomodel(fastdepthmodel)
     network_utils = networkUtils.__dict__[args.arch](model, args.input_data_shape, args.dataset_path, args.finetune_lr)
     
     if network_utils.get_num_simplifiable_blocks() <= args.block:

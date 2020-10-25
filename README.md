@@ -8,8 +8,13 @@ This repo contains the unofficial Pytorch fork of the "NetAdapt: Platform-Aware 
 </p>
 
 To run for FastDepth, use
-```python
+```bash
 python master.py -im C:/Users/z/Desktop/work/netadapt/monodepth2/models/fastdepth_640x192/fastdepth.pth -dp C:/Users/z/Desktop/work/data/noncommercial/kitti-raw -a fastdepth C:/Users/z/Desktop/work/netadapt/working 3 192 640
+```
+
+To run on multiple GPUs in SuperServer, use
+```bash
+CUDA_VISIBLE_DEVICES=0,1 python master.py -im monodepth2/models/fastdepth_640x192/fastdepth.pth -dp ../data/kitti-raw -gp 0 1 -a fastdepth working 3 192 640
 ```
 
 But, it doesn't work. Keeps getting the `ValueError: previous_out_channels is not divisible by layer.in_channels.`

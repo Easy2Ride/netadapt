@@ -201,9 +201,7 @@ def load_model(dict_state_path, map_location=None):
 
     working_dir = os.path.abspath(os.getcwd())
     scales = [0, 1, 2, 3]
-    fastdepthmodel = fastdepth.MobileNetSkipAddMultiScale([], False, 
-            os.path.join(working_dir, 'fast-depth','imagenet', 'results', 'imagenet.arch=mobilenet.lr=0.1.bs=256', 'model_best.pth.tar'),
-            scales)
+    fastdepthmodel = fastdepth.MobileNetSkipAddMultiScale(False, "", scales)
     class Fastmonomodel(torch.nn.Module):
         """This is a wrapper of the depth estimation module. Since torch.jit.trace
         only supports tuples as model output

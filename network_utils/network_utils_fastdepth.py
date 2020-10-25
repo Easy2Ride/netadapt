@@ -28,7 +28,7 @@ try:
     from monodepth2.networks.layers import *
 except ModuleNotFoundError:
     # if this file is imported as a module
-    from .monodepth2 import datasets
+    from monodepth2 import datasets
     from .monodepth2.utils import readlines
     from .monodepth2.networks.layers import *
 
@@ -145,7 +145,11 @@ class networkUtils_fastdepth(NetworkUtilsAbstract):
         self.depth_metric_names = [
             "de/abs_rel", "de/sq_rel", "de/rms", "de/log_rms", "da/a1", "da/a2", "da/a3"]
 
-        data_dir = "C:/Users/z/Desktop/work/data/noncommercial/kitti-raw"
+        data_dir = dataset_path
+        # if sys.platform == 'linux':
+        #     data_dir = "../data/kitti-raw"
+        # else:
+        #     data_dir = "C:/Users/z/Desktop/work/data/noncommercial/kitti-raw"
 
         fpath = os.path.join("monodepth2", "splits", split, "{}_files.txt")
         train_filenames = readlines(fpath.format("train"))
